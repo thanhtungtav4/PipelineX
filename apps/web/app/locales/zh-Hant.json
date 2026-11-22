@@ -1,0 +1,18 @@
+{
+  "video": {
+    "title": "影片",
+    "queued": "排隊中",
+    "making": "製作中",
+    "toReview": "待審核",
+    "failed": "失敗",
+    "approved": "已批准",
+    "rejected": "已拒絕",
+    "notUploaded": "未上傳",
+    "noVideos": "暫無影片。在右側選擇一個故事並按製作影片。",
+    "makeVideo": "製作影片",
+    "candidates": "候選故事",
+    "noCandidates": "暫無候選：故事需要3個以上來源和熱度。",
+    "youTubeConnected": "YouTube頻道已連接",
+    "couldNotCopy": "無法複製"
+  }
+}

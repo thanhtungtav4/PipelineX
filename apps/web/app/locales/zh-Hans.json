@@ -1,0 +1,18 @@
+{
+  "video": {
+    "title": "视频",
+    "queued": "排队中",
+    "making": "制作中",
+    "toReview": "待审核",
+    "failed": "失败",
+    "approved": "已批准",
+    "rejected": "已拒绝",
+    "notUploaded": "未上传",
+    "noVideos": "暂无视频。在右侧选择一个故事并按制作视频。",
+    "makeVideo": "制作视频",
+    "candidates": "候选故事",
+    "noCandidates": "暂无候选：故事需要3个以上来源和热度。",
+    "youTubeConnected": "YouTube频道已连接",
+    "couldNotCopy": "无法复制"
+  }
+}

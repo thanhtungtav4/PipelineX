@@ -24,7 +24,9 @@ async function get(url: string | URL, headers: Record<string, string>, timeoutMs
   try {
     return await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
   } catch (error) {
-    console.log(`  no answer from ${new URL(String(url)).hostname}: ${(error as Error).message.slice(0, 80)}`);
+    let host = String(url);
+    try { host = new URL(String(url)).hostname; } catch { /* keep the raw value */ }
+    console.log(`  no answer from ${host}: ${(error as Error).message.slice(0, 80)}`);
     return null;
   }
 }
@@ -45,7 +47,7 @@ async function commons(query: string): Promise<Cand[]> {
   const body = res && await res.json().catch(() => null) as any;
   if (!res?.ok || !body) { console.log(`  commons ${res?.status ?? "-"}`); return []; }
   const pages = Object.values(body.query?.pages ?? {}) as any[];
-  pages.sort((a, b) => a.index - b.index);
+  pages.sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
   const out: Cand[] = [];
   for (const p of pages) {
     const ii = p.imageinfo?.[0]; const m = ii?.extmetadata ?? {};
@@ -88,7 +90,7 @@ async function pixabay(query: string, videos: boolean): Promise<Cand[]> {
     if (h.isAiGenerated || h.isLowQuality) continue;
     const credit = `${h.user} on Pixabay`, license = "Pixabay License";
     if (videos) {
-      const f = h.videos?.small?.url && h.videos.small.width >= 1920 ? h.videos.small : h.videos?.tiny;
+      const f = h.videos?.medium?.url ? h.videos.medium : h.videos?.small?.url ? h.videos.small : h.videos?.tiny;
       if (!f?.url || used.has(f.url) || h.duration < 5 || f.width / f.height < 1.6) continue;
       out.push({ url: f.url, thumb: f.thumbnail || h.videos.tiny?.thumbnail, credit, license, sourceUrl: h.pageURL,
         width: f.width, height: f.height, kind: "video", duration: h.duration });
@@ -138,7 +140,7 @@ Answer YES only if ALL hold: (1) the image clearly shows ${wanted};
 (3) no other recognisable public figure appears who could mislead viewers about the story;
 (4) nothing offensive or unrelated dominates the picture;
 (5) it is not a photo of a document, letter, sign or screen with legible text, and shows no private person's name or signature;
-(6) its mood fits what is spoken (no celebration, smiling crowds or luxury over a scandal, lawsuit or loss) and it does not suggest a person, brand or product the narration is not about${preset?.pictureRules.length ? `;\n(7) ${preset.pictureRules.join("; ")}` : ""}.
+${Array.isArray(preset?.pictureRules) && preset.pictureRules.length ? `;\n(7) ${preset.pictureRules.join("; ")}` : ""}.
 Reply with one word: YES or NO.`;
   const question = ask ?? prompt;
   // Send the picture itself: providers cannot always fetch Wikimedia/Openverse URLs.
@@ -193,7 +195,9 @@ for (const scene of script.scenes) for (const beat of scene.beats) {
   const v = beat.visual; const i = n++;
   if (v.type !== "photo" && v.type !== "broll") continue;
 
-  const queries = fallbackQueries(v.query.trim(), beat.narration);
+  const query0 = String(v.query ?? "").trim();
+  if (!query0) { v.type = "card"; console.log(`beat ${i} ${v.type} "(no query)": no search words -> text card`); continue; }
+  const queries = fallbackQueries(query0, beat.narration);
   let found: Cand | null = null, tried = 0, errors = 0;
   // When the vision model is down (not when it said no), a stock b-roll clip for the beat's own words beats a text card.
   let unchecked: Cand | null | undefined;
@@ -210,11 +214,11 @@ for (const scene of script.scenes) for (const beat of scene.beats) {
          ...(await openverse(query)).slice(0, 2)];
     if (cands.length === 0) continue;
 
-    for (const c of cands.slice(0, query === v.query.trim() ? 8 : 4)) {
+    for (const c of cands.slice(0, query === query0 ? 8 : 4)) {
       if (tried >= MAX_CHECKS || used.has(c.url)) continue;
       tried++;
       const verdict = await fits(c, query, v.type, script.title, beat.narration);
-      if (verdict === "error") { unchecked ??= /on (Pixabay|Pexels)$/.test(c.credit) ? c : null; errors++; if (errors >= 3) break; continue; }
+      if (verdict === "error") { if (unchecked === undefined && /on (Pixabay|Pexels)$/.test(c.credit)) unchecked = c; errors++; if (errors >= 3) break; continue; }
       if (verdict === "yes") {
         found = c;
         used.add(c.url);
@@ -223,7 +227,7 @@ for (const scene of script.scenes) for (const beat of scene.beats) {
     }
     if (errors >= 3) break;
     if (found) {
-      if (query !== v.query.trim()) console.log(`  (matched via fallback query "${query}")`);
+      if (query !== query0) console.log(`  (matched via fallback query "${query}")`);
       break;
     }
   }
@@ -267,7 +271,7 @@ for (const beat of script.scenes.flatMap((s: any) => s.beats)) {
   if (name.split(/\s+/).length < 2 || name.split(/\s+/).length > 4) continue;
   if (!portraits.has(name)) {
     const surname = name.split(/\s+/).at(-1)!.toLowerCase();
-    const cands = (await commons(`intitle:"${name}"`)).filter((c) => decodeURIComponent(c.sourceUrl).toLowerCase().includes(surname)).slice(0, 3);
+    const cands = (await commons(`intitle:"${name}"`)).filter((c) => { try { return decodeURIComponent(c.sourceUrl).toLowerCase().includes(surname); } catch { return false; } }).slice(0, 3);
     let saved: Awaited<ReturnType<typeof save>> = null;
     for (const c of cands) {
       if (await fits(c, name, "photo", script.title, beat.narration, PORTRAIT) !== "yes") continue;

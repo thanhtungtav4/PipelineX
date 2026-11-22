@@ -40,7 +40,6 @@ export async function rescueVideoScript(id: number, actor: string, input: VideoS
   for (const scene of input.scenes) for (const beat of scene.beats) {
     const v = beat.visual;
     if ((v.type === "photo" || v.type === "broll") && !v.query) throw new Error(`A ${v.type} beat needs a search query ("${beat.narration.slice(0, 40)}…").`);
-    if (v.type === "card" && !v.text) throw new Error(`A card beat needs its text ("${beat.narration.slice(0, 40)}…").`);
   }
   // Claim the video before touching its files: this throws VideoConflict while it is queued or being made.
   await requeueVideo(id, "verify");

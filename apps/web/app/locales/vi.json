@@ -1,0 +1,18 @@
+{
+  "video": {
+    "title": "Video",
+    "queued": "Đang chờ",
+    "making": "Đang làm",
+    "toReview": "Chờ duyệt",
+    "failed": "Thất bại",
+    "approved": "Đã duyệt",
+    "rejected": "Đã từ chối",
+    "notUploaded": "Chưa upload",
+    "noVideos": "Chưa có video. Chọn một câu chuyện bên phải và nhấn Làm video.",
+    "makeVideo": "Làm video",
+    "candidates": "Câu chuyện ứng viên",
+    "noCandidates": "Chưa có ứng viên: cần 3 nguồn trở lên và độ nóng.",
+    "youTubeConnected": "Đã kết nối kênh YouTube",
+    "couldNotCopy": "Không thể sao chép"
+  }
+}

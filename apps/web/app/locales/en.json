@@ -1,0 +1,18 @@
+{
+  "video": {
+    "title": "Videos",
+    "queued": "Queued",
+    "making": "Making",
+    "toReview": "To review",
+    "failed": "Failed",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "notUploaded": "Not uploaded",
+    "noVideos": "No videos yet. Pick a story on the right and press Make video.",
+    "makeVideo": "Make video",
+    "candidates": "Candidate stories",
+    "noCandidates": "No candidates yet: a story needs reports from 3 or more sources and heat.",
+    "youTubeConnected": "YouTube channel connected",
+    "couldNotCopy": "Could not copy"
+  }
+}

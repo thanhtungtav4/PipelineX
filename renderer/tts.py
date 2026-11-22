@@ -11,7 +11,18 @@ Usage: VIDEO_WORKDIR=<dir> [VIDEO_VARIANT=short] python tts.py [voice]
 import asyncio, datetime, json, os, shutil, subprocess, sys
 from pathlib import Path
 
-import edge_tts
+try:
+    import edge_tts
+    import aiohttp
+except ImportError:
+    raise SystemExit("edge-tts is not installed: run `npm run video:setup` in the project root")
+
+# The pipeline reads this program's output as UTF-8; a Windows console otherwise uses a legacy code page.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
+
+HERE = Path(__file__).resolve().parent
 
 AZURE_KEY = os.environ.get("AZURE_SPEECH_KEY", "")
 AZURE_REGION = os.environ.get("AZURE_SPEECH_REGION", "")
@@ -30,16 +41,19 @@ SHORT = VARIANT == "short"
 BEAT_GAP = 0.1 if SHORT else 0.25   # pause between beats inside a scene (a Short keeps moving)
 SCENE_GAP = 0.3 if SHORT else 0.7   # pause between scenes
 # The video's style (style-preset.json, written by the pipeline) sets the pace and the music's mood.
-PRESET = json.loads((W / "style-preset.json").read_text()) if (W / "style-preset.json").exists() else None
+PRESET = json.loads((W / "style-preset.json").read_text(encoding="utf-8")) if (W / "style-preset.json").exists() else None
 # The channel's brand for the title cards (industry/channel.json of the checkout that runs the pipeline).
-INDUSTRY = Path(os.environ.get("VIDEO_INDUSTRY_DIR", "../industry"))
-CHANNEL = json.loads((INDUSTRY / "channel.json").read_text())
+INDUSTRY = Path(os.environ.get("VIDEO_INDUSTRY_DIR") or HERE.parent / "industry")
+CHANNEL = json.loads((INDUSTRY / "channel.json").read_text(encoding="utf-8"))
 RATE = (PRESET["voice"]["shortRate"] if SHORT else PRESET["voice"]["rate"]) if PRESET else ("+10%" if SHORT else "+4%")
 
 
 def duration(path: Path) -> float:
-    out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
-                         capture_output=True, text=True, check=True).stdout
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", check=True).stdout
+    except FileNotFoundError:
+        raise SystemExit("ffprobe not found on PATH: install FFmpeg (it includes ffprobe), then open a new terminal")
     return float(out.strip())
 
 
@@ -68,7 +82,7 @@ def get_cached(name: str, text: str, voice: str = VOICE):
     if not (path.exists() and path.stat().st_size > 0 and meta_path.exists()):
         return None
     try:
-        meta = json.loads(meta_path.read_text())
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
     except ValueError:
         return None
     if (meta.get("engine"), meta.get("voice"), meta.get("rate"), meta.get("text")) != (PREFERRED, voice, RATE, text):
@@ -77,7 +91,7 @@ def get_cached(name: str, text: str, voice: str = VOICE):
 
 
 def put_cache(name: str, text: str, engine: str, words: list, d: float, voice: str = VOICE):
-    (OUT / f"{name}.meta.json").write_text(json.dumps({"engine": engine, "voice": voice, "rate": RATE, "text": text, "words": words, "duration": d}))
+    (OUT / f"{name}.meta.json").write_text(json.dumps({"engine": engine, "voice": voice, "rate": RATE, "text": text, "words": words, "duration": d}), encoding="utf-8")
 
 
 def speak_azure(name: str, text: str, voice: str = VOICE):
@@ -127,10 +141,10 @@ async def speak_edge(name: str, text: str, voice: str = VOICE):
     for attempt in range(5):
         try:
             return await speak_once(name, text, voice)
-        except edge_tts.exceptions.NoAudioReceived:
+        except (edge_tts.exceptions.EdgeTTSException, aiohttp.ClientError, TimeoutError):
             if attempt == 4:
                 raise
-            print(f"{name}: no audio, retrying")
+            print(f"{name}: {type(error).__name__}: {str(error)[:120]}, retrying")
             await asyncio.sleep(5 * 2 ** attempt)
 
 
@@ -162,7 +176,7 @@ def brand() -> dict:
 
 
 async def main():
-    script = json.loads((W / IN).read_text())
+    script = json.loads((W / IN).read_text(encoding="utf-8"))
     t = 0.0
     scenes = []
     for si, s in enumerate(script["scenes"]):
@@ -187,18 +201,20 @@ async def main():
         scenes.append({k: s[k] for k in ("kind", "kicker", "headline")} | {"start": round(scene_start, 3), "duration": round(t - scene_start, 3), "beats": beats})
         print(f"scene {si}: {t - scene_start:5.1f}s, {len(beats)} beats")
     # Optional music bed: VIDEO_MUSIC, else the first track in renderer/music/ (e.g. from the YouTube Audio Library).
-    mood_tracks = sorted((Path("music") / PRESET["music"]).glob("*.mp3")) if PRESET else []
-    music = os.environ.get("VIDEO_MUSIC") or next((str(p) for p in mood_tracks), None) or next((str(p) for p in sorted(Path("music").glob("*.mp3"))), None)
-    if music and Path(music).exists():
+    music_dir = HERE / "music"
+    mood_tracks = sorted((music_dir / PRESET["music"]).glob("*.mp3")) if PRESET else []
+    music = os.environ.get("VIDEO_MUSIC") or next((str(p) for p in mood_tracks), None) or next((str(p) for p in sorted(music_dir.glob("*.mp3"))), None)
+    if music and Path(music).exists() and str(Path(music).resolve()) != str((W / "public" / "music.mp3").resolve()):
         shutil.copy(music, W / "public" / "music.mp3")
+    today = datetime.date.today()
     timeline = {"title": script["title"], "thumbnail_text": script.get("thumbnail_text"), "voice": VOICE, "total": round(t, 3), "scenes": scenes, "sources": script["sources"],
                 "mainTitle": script.get("mainTitle"),
                 "mainVideo": script.get("mainVideo"),
                 "music": "music.mp3" if music and Path(music).exists() else None,
-                "date": datetime.date.today().strftime("%b %-d, %Y"),
+                "date": f"{today:%b} {today.day}, {today.year}",
                 "style": PRESET["key"] if PRESET else "news", "palette": PRESET["visual"] if PRESET else None,
                 "brand": brand()}
-    (W / TIMELINE).write_text(json.dumps(timeline, indent=2))
+    (W / TIMELINE).write_text(json.dumps(timeline, indent=2), encoding="utf-8")
     print(f"total {t:.1f}s")
     chars = sum(len(b["narration"]) for s in script["scenes"] for b in s["beats"])
     engine = ("azure" if ENGINES["azure"] and not ENGINES["edge"]

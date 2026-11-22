@@ -217,3 +217,26 @@ Repo: nhánh `pipelinex`, remote AIHOT đổi tên thành `upstream` (lấy cậ
 - `modules/video/server.ts` & `videos.tsx`:
   - Trả về cờ `autoPublish` trong `/api/admin/video/overview`.
   - Hiển thị trạng thái "Auto publish: on" trên thanh tiêu đề trang Videos.
+
+## Chạy được trên Windows, macOS và Linux (22/11)
+
+- `modules/video/backend/pipeline.ts`: Python của bước voice chọn theo nền tảng — `VIDEO_PYTHON` → `renderer/.venv/Scripts/python.exe` (Windows) hoặc `.venv/bin/python` (macOS/Linux) → `python`/`python3`. Lỗi ENOENT ghi rõ phải chạy `npm run video:setup` / `npm install`. Remotion chạy bằng `node node_modules/@remotion/cli/remotion-cli.js` thay cho `.bin/remotion` (trên Windows shim là `.cmd`, `spawn` không chạy được). `spawn` truyền thêm biến hệ thống Windows (`SystemRoot`, `TEMP`, `TMP`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `ComSpec`, `PATHEXT`…) vì nó thay toàn bộ môi trường con; timeout dùng `taskkill /T` để dọn tiến trình Chrome con của Remotion.
+- `scripts/video-setup.ts` + `npm run video:setup`: tạo `renderer/.venv`, cài `requirements.txt`, kiểm tra import `edge_tts` và Azure SDK; cảnh báo khi thiếu `ffprobe` hoặc `renderer/node_modules`. Chạy được trên cả ba hệ điều hành, chạy lại an toàn.
+- `renderer/tts.py`: đọc/ghi JSON bằng UTF-8 (Windows mặc định cp1252, kịch bản có dấu ngoặc cong/em dash sẽ lỗi), ngày dạng `Nov 22, 2026` thay cho `%-d` (Windows ném `ValueError: Invalid format string`), in UTF-8, tìm `music/` và `industry/` theo thư mục script, báo rõ khi thiếu `ffprobe`.
+- `.env.example`: `VIDEO_PYTHON`. README: Bước 3 có lệnh chung và lệnh riêng cho Windows.
+
+## Quét bug module video & renderer (22/11)
+
+- `renderer/tts.py`: `speak_edge` bắt cả `EdgeTTSException`/`aiohttp.ClientError`/`TimeoutError` (không chỉ `NoAudioReceived`); retry 5/10/20/40s mới có tác dụng khi bị throttle 429.
+- `renderer/assets.ts`: Pixabay video dùng `medium` thay cho `tiny` (1920×1080 thay vì 640×360); guard beat thiếu `query` → `card` thay vì crash; `unchecked ??=` sửa thành chỉ gán khi nguồn là stock và chưa có stock lỗi; `get()` log an toàn; `preset?.pictureRules` optional-chaining đúng chỗ.
+- `modules/video/backend/pipeline.ts`: parse `RESULT` qua buffer `pending` (không mất kết quả khi output bị cắt chunk); truyền `VIDEO_ALT_VOICE_QUOTE`/`VIDEO_ALT_VOICE_CONFLICT` vào renderer; `.env.example` thêm hai biến này.
+- `modules/video/backend/publishing.ts`: `chapters` không còn chapter <10s (Intro 3s); `tagsFor` lấy năm từ cuối chuỗi ngày thay vì `slice(0,4)`.
+- `modules/video/backend/rescue.ts`: bỏ yêu cầu `text` cho beat `card` (renderer hiển thị narration).
+- Kiểm chứng: `npm run typecheck` (pass), `py_compile renderer/tts.py` (pass), `npm run video:setup` (pass), smoke voice cached + edge-tts thật (pass), chapters test (pass).
+
+## i18n hạ tầng (feat/i18n)
+
+- `apps/web/app/lib/i18n.ts` (mới): cấu hình i18next + react-i18next, 4 locale en/vi/zh-Hans/zh-Hant, lưu ngôn ngữ trong localStorage.
+- `apps/web/app/entry.client.tsx`: khởi tạo i18n trước hydration (engine AIHOT — sửa lõi, đã log).
+- `apps/web/app/locales/*.json` (mới): file dịch cho video module.
+- `apps/web/package.json`: thêm `i18next`, `react-i18next`.
