@@ -1,3 +1,3 @@
-# Python packages for tts.py (install into renderer/.venv: .venv/bin/python -m pip install -r requirements.txt)
+# Python packages for tts.py. Install with `npm run video:setup` (or `<venv python> -m pip install -r requirements.txt`).
 edge-tts==7.3.1
 azure-cognitiveservices-speech==1.53.1

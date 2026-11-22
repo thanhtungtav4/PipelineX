@@ -66,7 +66,7 @@ flowchart TD
 
 ## 💻 Yêu cầu hệ thống (Prerequisites)
 
-* **Hệ điều hành:** macOS (Apple Silicon M1/M2/M3/M4 tối ưu cho Remotion hardware acceleration) hoặc Linux (Ubuntu 22.04+).
+* **Hệ điều hành:** Windows 10/11 (x64), macOS (Apple Silicon tối ưu cho Remotion hardware acceleration) hoặc Linux (Ubuntu 22.04+).
 * **Node.js:** `v24.x` (Khuyến nghị `v24.15.0+`).
 * **PostgreSQL:** `v16` hoặc `v17` (chạy cổng mặc định 5432).
 * **Python:** `3.10+` (cho module Edge-TTS `tts.py`).
@@ -95,15 +95,25 @@ cd ..
 ```
 
 ### Bước 3: Thiết lập môi trường Python cho Edge-TTS
-Module giọng đọc sử dụng `edge-tts` hoàn toàn miễn phí, không tốn phí Azure Speech:
+Module giọng đọc dùng `edge-tts` miễn phí (không cần phí Azure Speech). Cần **Python 3.10+** và **FFmpeg** (có `ffprobe`) trên PATH.
+
+Chạy một lệnh, dùng được trên Windows, macOS và Linux — tạo `renderer/.venv` và cài đúng gói:
+```bash
+npm run video:setup
+```
+
+Làm tay (nếu không dùng script trên):
 ```bash
 cd renderer
+# macOS / Linux
 python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-deactivate
-cd ..
+.venv/bin/python -m pip install -r requirements.txt
+
+# Windows (PowerShell hoặc cmd)
+py -3 -m venv .venv        # hoặc: python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
 ```
+Không cần `activate`: bộ dựng video gọi thẳng Python trong `.venv` (Windows: `.venv\Scripts\python.exe`; macOS/Linux: `.venv/bin/python`). Muốn dùng trình thông dịch khác thì đặt `VIDEO_PYTHON` trong `.env`.
 
 ### Bước 4: Thiết lập Cơ sở dữ liệu PostgreSQL
 Khởi tạo cơ sở dữ liệu và chạy migrations:

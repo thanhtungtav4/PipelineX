@@ -1,7 +1,7 @@
 // Makes one video: story material -> script (LLM) -> pictures (Pixabay/Commons/Openverse, vision-checked) ->
 // voice (edge-tts) -> render (Remotion). Each step is a program in renderer/, run with the video's work
 // directory; each prints a last line "RESULT {json}" that is kept in video_jobs.result.
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,14 @@ export const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 export const RENDERER = process.env.VIDEO_RENDERER_DIR || path.join(ROOT, "renderer");
 export const WORK_ROOT = process.env.VIDEO_WORK_DIR || path.join(ROOT, ".data", "videos");
 
+/** The voice step's interpreter: $VIDEO_PYTHON, else the setup script's venv (Scripts on Windows, bin elsewhere). */
+function python(): string {
+  if (process.env.VIDEO_PYTHON) return process.env.VIDEO_PYTHON;
+  const windows = process.platform === "win32";
+  const venv = path.join(RENDERER, ".venv", windows ? "Scripts" : "bin", windows ? "python.exe" : "python");
+  return existsSync(venv) ? venv : windows ? "python" : "python3";
+}
+
 export const workDir = (id: number) => path.join(WORK_ROOT, String(id));
 export const videoFile = (id: number) => path.join(workDir(id), "video.mp4");
 export const shortFile = (id: number) => path.join(workDir(id), "short.mp4");
@@ -28,13 +36,19 @@ const MINUTE = 60_000;
  * read (renderer/lib.ts, background.ts, assets.ts, tts.py). Nothing else (database address, admin password, session
  * secrets) reaches them. renderer/.env (PIXABAY_API_KEY) is read by the programs themselves.
  */
-const SYSTEM_ENV = ["PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER", "SHELL"];
+const SYSTEM_ENV = [
+  "PATH", "HOME", "USERPROFILE", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL", "USER", "USERNAME", "SHELL",
+  // Windows: spawn replaces the child's whole environment, and Python, Node and Chrome read these for sockets,
+  // certificates, temp files and browser profiles.
+  "SystemRoot", "windir", "SystemDrive", "ComSpec", "PATHEXT", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA",
+  "NUMBER_OF_PROCESSORS",
+];
 const RENDERER_ENV = [
   "LLM_BASE_URL", "LLM_API_KEY", "LLM_MODEL", "LLM_REASONING_TOKENS",
   "NVIDIA_BASE_URL", "NVIDIA_API_KEY", "NVIDIA_MODEL", "OPENROUTER_BASE_URL", "OPENROUTER_API_KEY", "OPENROUTER_MODEL",
   "ORCAROUTER_BASE_URL", "ORCAROUTER_API_KEY", "ORCAROUTER_MODEL", "VIDEO_PROVIDERS",
   "TINYFISH_API_KEY", "TINYFISH_SEARCH_URL", "TINYFISH_FETCH_URL", "PIXABAY_API_KEY",
-  "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "VIDEO_TTS",
+  "AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "VIDEO_TTS", "VIDEO_ALT_VOICE_QUOTE", "VIDEO_ALT_VOICE_CONFLICT",
   "VIDEO_SCRIPT_MODEL", "VIDEO_SCRIPT_WORDS", "VIDEO_MATERIAL_CHARS", "VIDEO_DOSSIER", "VIDEO_DOSSIER_CHARS", "VIDEO_MUSIC",
   "FRED_API_KEY", "SEC_USER_AGENT", "PEXELS_API_KEY",
 ];
@@ -55,24 +69,31 @@ function command(step: Exclude<Step, "story">, dir: string): [string, string[]] 
     case "script": return node("script.ts");
     case "verify": return node("verify.ts");
     case "assets": return node("assets.ts");
-    case "voice": return [path.join(RENDERER, ".venv", "bin", "python"), ["tts.py"]];
-    case "thumbnail": return [path.join(RENDERER, "node_modules", ".bin", "remotion"), [
+    case "voice": return [python(), ["tts.py"]];
+    case "thumbnail": return remotion([
       "still", "src/index.ts", "Thumbnail", path.join(dir, "thumbnail.jpg"), `--props=${path.join(dir, "timeline.json")}`,
-      `--public-dir=${path.join(dir, "public")}`, "--image-format=jpeg", "--jpeg-quality=88", "--bundle-cache"]];
+      `--public-dir=${path.join(dir, "public")}`, "--image-format=jpeg", "--jpeg-quality=88", "--bundle-cache"]);
     case "short": return node("short.ts");
-    case "shortvoice": return [path.join(RENDERER, ".venv", "bin", "python"), ["tts.py"]];
-    case "shortrender": return [path.join(RENDERER, "node_modules", ".bin", "remotion"), [
+    case "shortvoice": return [python(), ["tts.py"]];
+    case "shortrender": return remotion([
       "render", "src/index.ts", "ShortVideo", path.join(dir, "short.mp4"), `--props=${path.join(dir, "timeline-short.json")}`,
       `--public-dir=${path.join(dir, "public")}`, "--codec", "h264", "--crf", "20",
       "--bundle-cache", "--hardware-acceleration", "if-possible",
-      "--concurrency", process.env.VIDEO_RENDER_CONCURRENCY || "4"]];
-    case "render": return [path.join(RENDERER, "node_modules", ".bin", "remotion"), [
+      "--concurrency", process.env.VIDEO_RENDER_CONCURRENCY || "4"]);
+    case "render": return remotion([
       "render", "src/index.ts", "NewsVideo", path.join(dir, "video.mp4"), `--props=${path.join(dir, "timeline.json")}`,
       `--public-dir=${path.join(dir, "public")}`, "--codec", "h264", "--crf", "20",
       "--bundle-cache", "--hardware-acceleration", "if-possible",
-      "--concurrency", process.env.VIDEO_RENDER_CONCURRENCY || "4"]];
+      "--concurrency", process.env.VIDEO_RENDER_CONCURRENCY || "4"]);
   }
 }
+
+/**
+ * Remotion's CLI, started with node. node_modules/.bin/remotion is a .cmd shim on Windows, and spawn cannot run a
+ * .cmd without a shell; the package's own entry behaves the same on every platform.
+ */
+const remotion = (args: string[]): [string, string[]] =>
+  [process.execPath, [path.join(RENDERER, "node_modules", "@remotion", "cli", "remotion-cli.js"), ...args]];
 
 /** Runs one program; resolves with the parsed RESULT line, rejects with the end of its output. */
 export function run(step: Exclude<Step, "story">, dir: string, extraEnv: Record<string, string> = {}): Promise<Record<string, unknown>> {
@@ -84,18 +105,34 @@ export function run(step: Exclude<Step, "story">, dir: string, extraEnv: Record<
     const child = spawn(bin, args, { cwd: RENDERER, env: { ...rendererEnv(), VIDEO_WORKDIR: dir, ...variant }, stdio: ["ignore", "pipe", "pipe"] });
     let tail = "";
     let result: Record<string, unknown> | null = null;
+    let pending = "";
     const take = (chunk: Buffer) => {
       const text = chunk.toString();
       appendFileSync(log, text);
       tail = (tail + text).slice(-4000);
-      for (const line of text.split("\n")) if (line.startsWith("RESULT ")) result = JSON.parse(line.slice(7));
+      pending += text;
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) if (line.startsWith("RESULT ")) {
+        try { result = JSON.parse(line.slice(7)); } catch { /* not a RESULT line */ }
+      }
     };
     child.stdout.on("data", take);
     child.stderr.on("data", take);
-    const timer = setTimeout(() => child.kill("SIGTERM"), LIMITS[step]);
-    child.on("error", (error) => { clearTimeout(timer); reject(error); });
+    // On Windows taskkill also takes the Chrome helpers Remotion started; elsewhere SIGTERM reaches the step.
+    const timer = setTimeout(() => {
+      if (process.platform === "win32" && child.pid) spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], { stdio: "ignore" }).on("error", () => {});
+      else child.kill("SIGTERM");
+    }, LIMITS[step]);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject((error as NodeJS.ErrnoException).code === "ENOENT"
+        ? new Error(`${step}: cannot start ${bin}. Run \`npm run video:setup\` (voice) and \`npm install\` in renderer/ (renders) once.`)
+        : error);
+    });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
+      if (pending.startsWith("RESULT ")) { try { result = JSON.parse(pending.slice(7)); } catch { /* not a RESULT line */ } }
       // Remotion prints no RESULT line: a clean exit is enough.
       if (code === 0) resolve(result ?? {});
       else reject(new Error(`${step} ${signal ? `stopped (${signal}, limit ${LIMITS[step] / MINUTE} min)` : `exited ${code}`}: ${lastLines(tail)}`));

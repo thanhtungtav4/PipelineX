@@ -66,7 +66,7 @@ export function buildEditorServer(makeQueue: ModuleQueue<{ id: number; from: Ste
       const yt = youtubeRecord(v.id);
       const ytStatus = yt?.longId
         ? (yt.publishedAt ? `[YouTube: Public - ${yt.longId}]` : `[YouTube: Private - ${yt.longId}]`)
-        : "[YouTube: Chưa upload]";
+        : "[YouTube: Not uploaded]";
       return { id: v.id, title: v.title, status: v.status, step: v.step, durationSeconds: v.duration_s, createdAt: v.created_at,
         flaggedLong: d?.longCheck.flagged.length ?? null, flaggedShort: d?.shortCheck.flagged.length ?? null,
         youtube: ytStatus };
