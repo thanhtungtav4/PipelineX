@@ -1,5 +1,5 @@
 // YouTube: the admin connects the channel once (OAuth), then a finished video is uploaded PRIVATE with its publish kit
-// (title, description, tags, category, language), thumbnail and English captions, and its Short likewise. It goes
+// (title, description, tags, category, language), thumbnail and captions in the channel's language, and its Short likewise. It goes
 // public only when a human clicks Publish on the Videos page; the editor MCP has no tool for either.
 //
 // Keys: YOUTUBE_CLIENT_ID / YOUTUBE_CLIENT_SECRET (a Google Cloud OAuth "Web application" client whose redirect URI is
@@ -127,10 +127,18 @@ async function uploadPart(access: string, url: string, type: string, data: Buffe
   if (!res.ok) throw new YouTubeError(`YouTube ${res.status}: ${youtubeReason(await res.text())}`);
 }
 
-/** English captions from the narration (captions.insert: a JSON part and the SRT part). */
+/** The channel profile's language (channel.json youtube.language, a display name) as a YouTube language code + name. */
+const LANGUAGES: Record<string, { code: string; name: string }> = {
+  English: { code: "en", name: "English" },
+  Vietnamese: { code: "vi", name: "Vietnamese" },
+};
+const channelLanguage = () => LANGUAGES[channelProfile().youtube?.language ?? "English"] ?? LANGUAGES.English!;
+
+/** Captions from the narration, in the channel profile's language (captions.insert: a JSON part and the SRT part). */
 async function uploadCaptions(access: string, videoId: string, srt: string) {
+  const language = channelLanguage();
   const boundary = `pipelinex${randomBytes(8).toString("hex")}`;
-  const meta = JSON.stringify({ snippet: { videoId, language: "en", name: "English", isDraft: false } });
+  const meta = JSON.stringify({ snippet: { videoId, language: language.code, name: language.name, isDraft: false } });
   const body = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/x-subrip\r\n\r\n${srt}\r\n--${boundary}--\r\n`);
   await uploadPart(access, "https://www.googleapis.com/upload/youtube/v3/captions?uploadType=multipart&part=snippet", `multipart/related; boundary=${boundary}`, body);
 }
@@ -172,7 +180,7 @@ async function upload(id: number, actor: string): Promise<YouTubeRecord> {
   if (!kit || !existsSync(path.join(dir, "video.mp4"))) throw new YouTubeError(`Video #${id} is not finished yet.`);
   const access = await accessToken();
   const yt = channelProfile().youtube;
-  const lang = "en"; // every PipelineX channel is in English
+  const lang = channelLanguage().code; // the channel profile's language (channel.json youtube.language)
   const status = { privacyStatus: "private", selfDeclaredMadeForKids: false, containsSyntheticMedia: false, embeddable: true, license: "youtube" };
   const snippet = (p: { title: string; description: string; tags: string[] }) =>
     ({ title: p.title, description: p.description, tags: p.tags, categoryId: CATEGORY[yt?.category ?? "News & Politics"] ?? "25", defaultLanguage: lang, defaultAudioLanguage: lang });

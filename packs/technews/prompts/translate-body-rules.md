@@ -1,0 +1,7 @@
+- Use standard Vietnamese tech terminology consistently across the text; keep product names, model names, code and technical identifiers in their original form.
+- Output the exact same number of translated fragments in original order inside JSON array `t`: {"t": ["...", "..."]}.
+- Verbatim preserve HTML tags and attributes (a, strong, em, b, i, br, sup, sub, span, etc.), translating only inner text. Do not translate URLs, code, commands, or filenames.
+- Placeholders like ⟦0⟧, ⟦1⟧ represent images or code blocks; place them verbatim in corresponding positions, each appearing exactly once.
+- Links are formatted as <a id="L0">text</a>: preserve the a tag and its id, translating only the inner text without adding or removing links.
+- Preserve entity names, company names, tickers, numbers, units, dates, and pricing verbatim.
+- If a fragment is already in Vietnamese, or contains only symbols/numbers, return it unchanged.

@@ -1,0 +1,1 @@
+`sections` provides introductory lead-ins for sections: write only for {{columns}}, keyed by section name: each is one sentence under 50 words highlighting the shared trend or notable events not covered in the overview. Do not repeat facts or figures already in the overview, and do not parrot item headlines.

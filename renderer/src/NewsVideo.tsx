@@ -12,8 +12,18 @@ export type Palette = { accent: string; accent2: string; kicker: string };
 export type Brand = { name: string; label: string; tagline: string; mark?: string };
 export type Timeline = { title: string; total: number; scenes: Scene[]; sources?: Array<{ n: number; name: string; title?: string }>; music?: string | null; date?: string;
   style?: string; palette?: Palette | null; brand?: Brand; mainTitle?: string; mainVideo?: { title?: string; url?: string; id?: string } };
-/** The channel's brand on the cards (the timeline's, from industry/channel.json). */
-export const DEFAULT_BRAND: Brand = { name: "PipelineX", label: "AI NEWS", tagline: "The AI news that matters, every day." };
+import channelProfile from "../../industry/channel.json";
+
+/** The channel's brand on the cards: the running checkout's channel profile (industry/channel.json) — the
+ *  same profile the voice step reads for the timeline's brand, which still wins when a render passes one.
+ *  Only name/label/tagline are taken: the profile's mark is a path inside the industry folder, and the voice
+ *  step copies it into the video's public folder only for real renders, so a bare preview keeps the dot. */
+const PROFILE_BRAND = (channelProfile as { brand?: Partial<Brand> }).brand ?? {};
+export const DEFAULT_BRAND: Brand = {
+  name: PROFILE_BRAND.name ?? "PipelineX",
+  label: PROFILE_BRAND.label ?? "AI NEWS",
+  tagline: PROFILE_BRAND.tagline ?? "The AI news that matters, every day.",
+};
 
 /** The channel's mark (brand.mark, copied into the video's public folder by the voice step), else a dot. */
 export const BrandMark = ({ brand, size, color }: { brand: Brand; size: number; color: string }) =>

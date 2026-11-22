@@ -37,9 +37,9 @@ export async function loader({ request }: Route.LoaderArgs) {
       headers: Object.assign({}, ...webModules().map((m) => m.root?.documentHeaders?.(request) ?? {})),
       signal: request.signal,
     });
-    return { ...meta, release };
+    return { ...meta, release, logoUrl: process.env.SITE_LOGO_URL || null };
   } catch {
-    return { changelogVersion: null, release };
+    return { changelogVersion: null, release, logoUrl: process.env.SITE_LOGO_URL || null };
   }
 }
 

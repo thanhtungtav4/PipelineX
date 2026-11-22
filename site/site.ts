@@ -19,6 +19,8 @@ export const EDITION_WHEN = {
 export const SITE = {
   /** Site name: used in navigation, page titles, OG cards, RSS, MCP, and admin. */
   name: "Market Decoded",
+  /** Optional logo URL (env SITE_LOGO_URL). Defaults to the author's mark when unset. */
+  logoUrl: process.env.SITE_LOGO_URL || null,
   /** Industry keyword: interpolated into phrases like "AI Briefing", "AI Updates". */
   subject: "Markets",
   /** Homepage full title (browser tab, search engines). */
